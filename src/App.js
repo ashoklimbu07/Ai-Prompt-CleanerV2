@@ -329,17 +329,10 @@ function App() {
     if (extractedPrompts.length === 0) return;
     
     try {
-      const allPrompts = extractedPrompts.map(p => {
-        try {
-          return JSON.parse(p.json);
-        } catch {
-          return { completeImagePrompt: p.completeImagePrompt };
-        }
-      });
-      
-      const combinedJson = allPrompts.length === 1 
-        ? extractedPrompts[0].json
-        : JSON.stringify(allPrompts, null, 2);
+      // Join all JSON strings with line breaks instead of creating an array
+      const combinedJson = extractedPrompts
+        .map(p => p.json)
+        .join('\n');
       
       await navigator.clipboard.writeText(combinedJson);
       alert('All prompts copied to clipboard!');
