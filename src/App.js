@@ -325,19 +325,27 @@ function App() {
     }
   };
 
-  const handleCopyAll = async () => {
+  const handleDownloadAll = () => {
     if (extractedPrompts.length === 0) return;
     
     try {
-      // Join all JSON strings with line breaks instead of creating an array
+      // Join all JSON strings with line breaks between each prompt
       const combinedJson = extractedPrompts
         .map(p => p.json)
-        .join('\n');
+        .join('\n\n');
       
-      await navigator.clipboard.writeText(combinedJson);
-      alert('All prompts copied to clipboard!');
+      // Create a blob and download as .txt file
+      const blob = new Blob([combinedJson], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'image-prompts.txt';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Failed to copy to clipboard');
+      alert('Failed to download file');
     }
   };
 
@@ -417,10 +425,10 @@ function App() {
             <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
               <h2 className="text-3xl mb-5 text-cyan-400">Extracted Image Prompts ({extractedPrompts.length})</h2>
               <button 
-                onClick={handleCopyAll} 
+                onClick={handleDownloadAll} 
                 className="bg-gradient-to-br from-cyan-400 to-blue-500 text-black border-none px-5 py-2.5 rounded-lg text-sm font-semibold cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,255,255,0.3)]"
               >
-                Copy All as JSON
+                Download as TXT
               </button>
             </div>
             <div className="flex flex-col gap-4">
