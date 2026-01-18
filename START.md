@@ -176,13 +176,14 @@ PORT=5000
 GEMINI_MODEL=gemini-1.5-flash
 FRONTEND_URL=http://localhost:3000
 ```
+**Note:** Copy `backend/env.example` to `backend/.env` and update the values
 
 ### Frontend (.env in frontend folder)
 ```env
 VITE_API_URL=http://localhost:5000
 ```
 
-**Note:** Copy `frontend/.env.example` to `frontend/.env` and update the values
+**Note:** Copy `frontend/env.example` to `frontend/.env` and update the values
 
 ---
 

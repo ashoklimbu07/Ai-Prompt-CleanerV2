@@ -56,13 +56,14 @@ PORT=5000
 GEMINI_MODEL=gemini-1.5-flash
 FRONTEND_URL=http://localhost:3000
 ```
+**Note:** You can also copy `backend/env.example` to `backend/.env`
 
 Create `frontend/.env` (optional for local development):
 ```env
 VITE_API_URL=http://localhost:5000
 ```
 
-**Note:** You can also copy `frontend/.env.example` to `frontend/.env`
+**Note:** You can also copy `frontend/env.example` to `frontend/.env`
 
 3. Start both backend and frontend simultaneously:
 ```bash
@@ -128,7 +129,7 @@ npm install
 VITE_API_URL=http://localhost:5000
 ```
 
-**Note:** You can also copy `frontend/.env.example` to `frontend/.env`
+**Note:** You can also copy `frontend/env.example` to `frontend/.env`
 
 4. Start the frontend:
 ```bash
