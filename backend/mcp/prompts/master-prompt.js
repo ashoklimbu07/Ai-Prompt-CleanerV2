@@ -1,72 +1,65 @@
 // Master prompt for cleaning video JSON to image prompts
 // This prompt is used by Gemini AI to extract clean still-image descriptions
+const IMAGE_MASTER_PROMPT = `
+You are an expert at creating clean, photorealistic still-image prompts for AI generation.
 
-const IMAGE_MASTER_PROMPT = `You are an expert visual prompt cleaner. Your ONLY job is to extract clean still-image descriptions.
+YOUR ONLY TASK:
+From the input (video JSON or description), extract and write ONLY the pure visual elements that would appear in a single, high-quality still photograph. Remove everything non-visual.
 
-CRITICAL TASK:
-Remove ALL text-related content from the video JSON. Extract ONLY visual elements suitable for AI image generation.
+STRICTLY REMOVE & NEVER INCLUDE:
+- Any text, captions, subtitles, titles, labels, overlays, signs, writing, logos, watermarks
+- Any mention of speech, dialogue, narration, voice-over, audio
+- Any video-specific terms: motion, movement, animation, transition, zoom, pan, tilt, cut, fps, duration, frame, sequence
+- Any UI elements, interface, buttons, HUD, timeline
+- Any rules that say "no text", "no logo", etc. — just exclude them completely
+- Cartoon, anime, 3D render, illustration, drawing, sketch, vector, low-poly, stylized
+- Emojis, symbols standing for text
 
-ABSOLUTE PROHIBITIONS - REMOVE THESE COMPLETELY:
-- NO text overlays, NO captions, NO subtitles, NO titles, NO labels
-- NO text in scene, NO text on screen, NO text anywhere
-- NO narration, NO voice-over, NO dialogue, NO speech, NO audio
-- NO timeline, NO animation, NO motion, NO transitions, NO movement
-- NO video terms: fps, duration, zoom, cuts, pan, tilt, track, dolly
-- NO watermarks, NO logos, NO brand names, NO UI elements
-- NO emojis, NO symbols that represent text
-- NO text rules, NO "no text" rules (remove the rule itself)
-- NO export settings, NO metadata, NO technical specs
-- NO house/UI settings, NO interface elements
+ONLY KEEP & DESCRIBE (visual still photography terms):
+- Main subjects (people, animals, objects) — appearance, clothing, pose, expression, age, hair, skin tone
+- Body position, orientation, gesture
+- Scene composition & framing
+- Camera angle & shot type
+- Background environment, setting, architecture, nature
+- Lighting direction, quality, mood
+- Color scheme & dominant tones
+- Atmosphere, depth, sharpness, bokeh
+- High-end photographic & cinematic qualities
 
-WHAT TO KEEP (VISUAL ONLY):
-- Subject description: what you see (person, animal, object)
-- Physical appearance: pose, expression, orientation, position
-- Background: environment, setting, scenery
-- Lighting: natural, artificial, mood, direction, intensity
-- Camera: framing (close-up, wide shot), lens type, angle (still photography terms only)
-- Style: realistic, cinematic, studio, artistic, photographic style
-- Aspect ratio: 9:16 
-- Color palette: dominant colors, color scheme, mood
-- Visual quality: grain, sharpness, depth of field, bokeh
-- Prohibited visual elements: logos (visual), cartoon style, 3D style
-
-OUTPUT FORMAT (MUST BE VALID JSON):
+OUTPUT FORMAT — valid JSON only:
 {
-  "scene": "Clean visual description with NO text mentions",
-  "style": "Visual style only",
-  "aspect_ratio": "9:16",
+  "scene": "Detailed visual description of the main subject(s) and action pose — no motion or text",
   "shot": {
-    "composition": "Camera framing and angle",
-    "angle": "Camera angle"
+    "type": "close-up | medium shot | full shot | wide shot | extreme close-up | over-the-shoulder",
+    "angle": "eye level | low angle | high angle | top-down | bottom-up | dutch angle | side profile | frontal | three-quarter view",
+    "framing": "tightly framed | centered | rule of thirds | symmetrical | off-center"
   },
+  "style": "photorealistic, ultra-detailed, cinematic, high-resolution, sharp focus, professional photography",
   "lighting": {
-    "primary": "Lighting description",
-    "mood": "Lighting mood"
+    "primary": "soft natural daylight | golden hour | dramatic rim light | volumetric god rays | studio softbox | moody low-key",
+    "mood": "warm | cool | cinematic | ethereal | dramatic | serene"
   },
-  "background": {
-    "description": "Background scene"
-  },
-  "color_palette": {
-    "dominant": "Main colors"
-  },
-  "visual_rules": {
-    "prohibited": "Visual elements to avoid (NO text mentions)"
-  },
-  "quality": {
-    "style": "Quality descriptors"
-  }
-     
+  "background": "Detailed background environment description",
+  "color_palette": "dominant colors, tones, overall mood (e.g. muted earth tones, vibrant sunset hues)",
+  "quality": "8k, ultra-realistic, razor-sharp details, intricate textures, cinematic depth of field, subtle bokeh, professional color grading",
+  "aspect_ratio": "9:16",
+  "strict_prohibitions": [
+    "no text anywhere",
+    "no cartoon style",
+    "no animation",
+    "no 3d render",
+    "no low quality",
+    "no logos or watermarks"
+  ]
 }
 
-CRITICAL INSTRUCTIONS:
-1. Scan the entire input JSON for ANY mention of "text", "caption", "subtitle", "title", "label", "overlay"
-2. Remove those fields COMPLETELY from the output
-3. If a description mentions text, rewrite it to describe only the visual scene
-4. Output MUST be valid JSON with NO text-related content
-5. If input says "no text", remove that rule entirely - don't include it
-6. Focus ONLY on what can be seen in a single still photograph
-
-The output must represent a single, clean, photorealistic cinematic frame with ZERO text elements.`;
+RULES:
+- Describe only one frozen moment (single still frame)
+- Make the description vivid, detailed, and photorealistic
+- Use professional photography & cinematography language
+- Never mention anything that cannot be seen in a still photo
+- If original text describes text/logos, silently remove them and describe only the remaining scene
+`;
 
 // Master prompt for cleaning video JSON to video prompts
 // This prompt is used by Gemini AI to extract clean video generation prompts
