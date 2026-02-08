@@ -54,6 +54,14 @@ class PromptHandlers {
    * @param {Object} res - Express response object
    */
   async handleCleanPrompts(req, res) {
+    // Create a cancellation signal that triggers when client disconnects
+    let cancelled = false;
+    const onClose = () => {
+      cancelled = true;
+      console.log('🛑 Client disconnected — cancelling remaining API calls');
+    };
+    req.on('close', onClose);
+
     try {
       const { prompts, type } = req.body;
       const promptType = this.normalizePromptType(type);
@@ -72,12 +80,32 @@ class PromptHandlers {
         return res.status(400).json({ error: 'type must be either "image" or "video"' });
       }
       
-      const cleanedPrompts = await this.cleanPromptsTool.execute(prompts, promptType);
+      const isCancelled = () => cancelled;
+      const cleanedPrompts = await this.cleanPromptsTool.execute(prompts, promptType, isCancelled);
+      
+      // Don't send response if client already disconnected
+      if (cancelled) {
+        console.log('🛑 Skipping response — client already disconnected');
+        return;
+      }
+      
       console.log(`✅ Successfully cleaned ${cleanedPrompts.length} ${promptType} prompts`);
       res.json({ cleanedPrompts });
     } catch (error) {
+      if (cancelled) {
+        console.log('🛑 Request was cancelled by client');
+        return;
+      }
+      if (error.message === 'CANCELLED') {
+        console.log('🛑 Processing cancelled — client disconnected');
+        return;
+      }
       console.error('Error in /api/clean-prompts:', error);
-      res.status(500).json({ error: error.message });
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      }
+    } finally {
+      req.removeListener('close', onClose);
     }
   }
 

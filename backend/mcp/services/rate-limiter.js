@@ -32,12 +32,29 @@ class RateLimiter {
   }
 
   /**
+   * Cancellation-aware sleep — resolves early if cancelled
+   * @param {number} ms - Milliseconds to wait
+   * @param {Function} isCancelled - Returns true when cancelled
+   * @param {number} checkInterval - How often to poll cancellation (ms)
+   * @returns {Promise<void>}
+   */
+  async cancellableSleep(ms, isCancelled = () => false, checkInterval = 500) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      if (isCancelled()) return;
+      const remaining = end - Date.now();
+      await new Promise(resolve => setTimeout(resolve, Math.min(checkInterval, remaining)));
+    }
+  }
+
+  /**
    * Wait for rate limit delay
    * @param {number} requestCount - Current request count
    * @param {number} minuteStartTime - Start time of current minute window
+   * @param {Function} isCancelled - Optional cancellation check
    * @returns {Promise<void>}
    */
-  async waitForRateLimit(requestCount, minuteStartTime) {
+  async waitForRateLimit(requestCount, minuteStartTime, isCancelled = () => false) {
     const currentTime = Date.now();
     const timeSinceMinuteStart = currentTime - minuteStartTime;
     
@@ -46,7 +63,8 @@ class RateLimiter {
       const waitTime = this.minuteDelay - timeSinceMinuteStart;
       if (waitTime > 0) {
         console.log(`\n⏸️  Rate limit reached (${this.maxRequestsPerMinute} requests/minute). Waiting ${Math.ceil(waitTime / 1000)} seconds before continuing...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+        await this.cancellableSleep(waitTime, isCancelled);
+        if (isCancelled()) return { requestCount: 0, minuteStartTime: Date.now() };
       }
       // Reset counter for new minute
       return { requestCount: 0, minuteStartTime: Date.now() };
@@ -58,12 +76,13 @@ class RateLimiter {
   /**
    * Wait between batches (except first one)
    * @param {number} batchIndex - Current batch index
+   * @param {Function} isCancelled - Optional cancellation check
    * @returns {Promise<void>}
    */
-  async waitBetweenBatches(batchIndex) {
+  async waitBetweenBatches(batchIndex, isCancelled = () => false) {
     if (batchIndex > 0) {
       console.log(`\n⏸️  Waiting ${this.delayBetweenBatches / 1000} seconds before next batch (rate limiting)...`);
-      await new Promise(resolve => setTimeout(resolve, this.delayBetweenBatches));
+      await this.cancellableSleep(this.delayBetweenBatches, isCancelled);
     }
   }
 

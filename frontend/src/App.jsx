@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, Trash2, Download, Copy, Check, Sparkles, Github, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Upload, Trash2, Download, Copy, Check, Sparkles, Github, AlertTriangle, XCircle } from 'lucide-react';
 import LoadingBar from './components/LoadingBar';
 
 function App() {
@@ -17,6 +17,17 @@ function App() {
   const [expandedJsonIndex, setExpandedJsonIndex] = useState(null);
   const [usingFallback, setUsingFallback] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState({ image: null, video: null });
+  const abortControllerRef = useRef(null);
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsCleaning(false);
+    setCleaningType(null);
+    setCleaningProgress({ current: 0, total: 0 });
+  };
 
   // Get API URL from environment variable or use default
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -315,6 +326,13 @@ function App() {
     const promptType = type;
     const shouldStreamResults = promptType === 'image';
     
+    // Create new AbortController for this request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
     setIsCleaning(true);
     setCleaningType(promptType); // Set the active cleaning type
     setErrorMessage(null);
@@ -353,6 +371,7 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ prompts: jsonObjects, type: promptType }),
+        signal: abortController.signal,
       });
       
       const contentType = response.headers.get('content-type');
@@ -493,6 +512,12 @@ function App() {
       setLastResultType(promptType);
       setCleaningProgress({ current: totalPrompts, total: totalPrompts });
     } catch (error) {
+      // If the request was cancelled by the user, don't show error
+      if (error.name === 'AbortError') {
+        console.log('🛑 Request cancelled by user');
+        return;
+      }
+      
       console.error('Error processing prompts:', error);
       let errorMsg = error.message;
       
@@ -507,6 +532,7 @@ function App() {
     } finally {
       setIsCleaning(false);
       setCleaningType(null); // Reset cleaning type when done
+      abortControllerRef.current = null;
     }
   };
 
@@ -784,10 +810,17 @@ function App() {
           
           {/* Loading message below buttons */}
           {isCleaning && (
-            <div className="mt-3 text-center">
+            <div className="mt-3 flex flex-col items-center gap-2">
               <p className="text-sm text-gray-600 font-medium">
                 Cleaning {cleaningType === 'image' ? 'Image' : 'Video'} {cleaningProgress.total} {cleaningProgress.total === 1 ? 'prompt' : 'prompts'}...
               </p>
+              <button
+                onClick={handleCancel}
+                className="px-4 py-1.5 rounded border border-red-300 bg-red-50 text-red-600 text-sm font-medium hover:bg-red-100 hover:border-red-400 transition-all flex items-center gap-1.5"
+              >
+                <XCircle className="w-4 h-4" />
+                <span>Cancel</span>
+              </button>
             </div>
           )}
           

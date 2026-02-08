@@ -35,9 +35,10 @@ class CleanPromptsTool {
    * Execute the tool
    * @param {Array<string>} prompts - Array of JSON strings to clean
    * @param {string} type - Prompt type: 'image' or 'video' (default: 'image')
+   * @param {Function} isCancelled - Optional function that returns true if request was cancelled
    * @returns {Promise<Array<string>>} Array of cleaned JSON strings
    */
-  async execute(prompts, type = 'image') {
+  async execute(prompts, type = 'image', isCancelled = () => false) {
     if (!prompts || !Array.isArray(prompts)) {
       throw new Error('prompts array is required');
     }
@@ -64,18 +65,36 @@ class CleanPromptsTool {
     let minuteStartTime = Date.now();
 
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      // Check if request was cancelled before processing next batch
+      if (isCancelled()) {
+        console.log(`🛑 Cancellation detected before batch ${batchIndex + 1}/${totalBatches} — stopping`);
+        throw new Error('CANCELLED');
+      }
+
       const batch = this.rateLimiter.getBatch(prompts, batchIndex);
       const startIndex = batchIndex * this.rateLimiter.batchSize;
       const endIndex = Math.min(startIndex + this.rateLimiter.batchSize, totalPrompts);
 
       try {
-        // Check and wait for rate limit
-        const rateLimitResult = await this.rateLimiter.waitForRateLimit(requestCount, minuteStartTime);
+        // Check and wait for rate limit (with cancellation checks)
+        const rateLimitResult = await this.rateLimiter.waitForRateLimit(requestCount, minuteStartTime, isCancelled);
         requestCount = rateLimitResult.requestCount;
         minuteStartTime = rateLimitResult.minuteStartTime;
 
-        // Wait between batches
-        await this.rateLimiter.waitBetweenBatches(batchIndex);
+        // Check cancellation after rate limit wait
+        if (isCancelled()) {
+          console.log(`🛑 Cancellation detected after rate limit wait — stopping`);
+          throw new Error('CANCELLED');
+        }
+
+        // Wait between batches (with cancellation checks)
+        await this.rateLimiter.waitBetweenBatches(batchIndex, isCancelled);
+
+        // Check cancellation after batch wait
+        if (isCancelled()) {
+          console.log(`🛑 Cancellation detected after batch wait — stopping`);
+          throw new Error('CANCELLED');
+        }
 
         // Log batch info
         this.rateLimiter.logBatchInfo(batchIndex, totalBatches, startIndex, endIndex, batch.length, requestCount);
@@ -92,6 +111,9 @@ class CleanPromptsTool {
         requestCount++;
 
       } catch (error) {
+        // Re-throw cancellation
+        if (error.message === 'CANCELLED') throw error;
+        
         console.error(`  ❌ Error cleaning batch ${batchIndex + 1}:`, error.message);
         // If batch fails, use original prompts
         for (const prompt of batch) {
