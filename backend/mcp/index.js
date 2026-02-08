@@ -8,12 +8,13 @@ const PromptHandlers = require('./handlers/prompt-handlers');
 class MCPServer {
   constructor(config = {}) {
     // Initialize services - separate services for image and video
-    this.geminiImageService = new GeminiService(config.geminiApiKey, {
-      apiKeyLabel: 'GEMINI_API_KEY',
+    // Accepts arrays of keys for round-robin rotation
+    this.geminiImageService = new GeminiService(config.geminiApiKeys || config.geminiApiKey, {
+      apiKeyLabel: 'GEMINI_API_KEY(1-10)',
       serviceLabel: 'image'
     });
-    this.geminiVideoService = new GeminiService(config.geminiVideoApiKey, {
-      apiKeyLabel: 'GEMINI_VIDEO_API_KEY',
+    this.geminiVideoService = new GeminiService(config.geminiVideoApiKeys || config.geminiVideoApiKey, {
+      apiKeyLabel: 'GEMINI_VIDEO_API_KEY(1-10)',
       serviceLabel: 'video'
     });
     

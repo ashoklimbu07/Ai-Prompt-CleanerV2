@@ -27,10 +27,37 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Initialize MCP Server with both image and video API keys
+// Collect all GEMINI_API_KEY1..10 into an array (skips empty ones)
+const geminiImageKeys = [
+  process.env.GEMINI_API_KEY1,
+  process.env.GEMINI_API_KEY2,
+  process.env.GEMINI_API_KEY3,
+  process.env.GEMINI_API_KEY4,
+  process.env.GEMINI_API_KEY5,
+  process.env.GEMINI_API_KEY6,
+  process.env.GEMINI_API_KEY7,
+  process.env.GEMINI_API_KEY8,
+  process.env.GEMINI_API_KEY9,
+  process.env.GEMINI_API_KEY10,
+].filter(Boolean);
+
+const geminiVideoKeys = [
+  process.env.GEMINI_VIDEO_API_KEY1,
+  process.env.GEMINI_VIDEO_API_KEY2,
+  process.env.GEMINI_VIDEO_API_KEY3,
+  process.env.GEMINI_VIDEO_API_KEY4,
+  process.env.GEMINI_VIDEO_API_KEY5,
+  process.env.GEMINI_VIDEO_API_KEY6,
+  process.env.GEMINI_VIDEO_API_KEY7,
+  process.env.GEMINI_VIDEO_API_KEY8,
+  process.env.GEMINI_VIDEO_API_KEY9,
+  process.env.GEMINI_VIDEO_API_KEY10,
+].filter(Boolean);
+
+// Initialize MCP Server with arrays of API keys (round-robin rotation)
 const mcpServer = new MCPServer({
-  geminiApiKey: process.env.GEMINI_API_KEY,
-  geminiVideoApiKey: process.env.GEMINI_VIDEO_API_KEY,
+  geminiApiKeys: geminiImageKeys,
+  geminiVideoApiKeys: geminiVideoKeys,
   batchSize: 5,
   maxRequestsPerMinute: 10,
   delayBetweenBatches: 6000,
@@ -48,18 +75,18 @@ app.get('/api/health', (req, res) => handlers.handleHealthCheck(req, res));
 const server = app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn('⚠️  WARNING: GEMINI_API_KEY is not set in .env file');
-    console.warn('⚠️  Image cleaning features will not work without an API key');
+  if (geminiImageKeys.length === 0) {
+    console.warn('⚠️  WARNING: No GEMINI_API_KEY(1-10) set in .env file');
+    console.warn('⚠️  Image cleaning features will not work without at least one API key');
   } else {
-    console.log('✅ Gemini Image API key is configured');
+    console.log(`✅ Gemini Image API: ${geminiImageKeys.length} key(s) loaded (round-robin)`);
   }
   
-  if (!process.env.GEMINI_VIDEO_API_KEY) {
-    console.warn('⚠️  WARNING: GEMINI_VIDEO_API_KEY is not set in .env file');
-    console.warn('⚠️  Video cleaning features will not work without a video API key');
+  if (geminiVideoKeys.length === 0) {
+    console.warn('⚠️  WARNING: No GEMINI_VIDEO_API_KEY(1-10) set in .env file');
+    console.warn('⚠️  Video cleaning features will not work without at least one API key');
   } else {
-    console.log('✅ Gemini Video API key is configured');
+    console.log(`✅ Gemini Video API: ${geminiVideoKeys.length} key(s) loaded (round-robin)`);
   }
 });
 
