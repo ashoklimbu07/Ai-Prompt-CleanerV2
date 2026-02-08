@@ -1,5 +1,5 @@
 const ApiKeyManager = require('./api-key-manager');
-const { getMasterPrompt, getBatchMasterPrompt } = require('../prompts/master-prompt');
+const { getMasterPrompt } = require('../prompts/master-prompt');
 
 // Prompt type constants
 const PROMPT_TYPE_IMAGE = 'image';
@@ -22,15 +22,15 @@ class GeminiService {
     const keysArray = Array.isArray(apiKeys) ? apiKeys : [apiKeys].filter(Boolean);
 
     this.keyManager = new ApiKeyManager(keysArray);
-    this.modelName = 'gemini-2.5-flash';
-    this.maxRetries = Math.max(keysArray.length, 1); // retry up to once per key
+    this.modelName = options.modelName || 'gemini-2.5-flash';
+    this.maxRetries = Math.max(keysArray.length, 3); // retry up to once per key (min 3)
     this.apiKeyLabel = options.apiKeyLabel || 'GEMINI_API_KEY';
     this.serviceLabel = options.serviceLabel || 'image';
 
     if (!this.keyManager.isConfigured()) {
       console.warn(`⚠️  WARNING: ${this.apiKeyLabel} is not set. Gemini cleaning features will not work.`);
     } else {
-      console.log(`🔑 [${this.serviceLabel}] Loaded ${this.keyManager.totalCount} API key(s)`);
+      console.log(`🔑 [${this.serviceLabel}] Loaded ${this.keyManager.totalCount} API key(s) | Model: ${this.modelName} | Max retries: ${this.maxRetries}`);
     }
   }
 
@@ -40,6 +40,21 @@ class GeminiService {
    */
   isConfigured() {
     return this.keyManager.isConfigured();
+  }
+
+  /**
+   * Get key rotation statistics
+   * @returns {Object}
+   */
+  getKeyStats() {
+    return {
+      serviceLabel: this.serviceLabel,
+      modelName: this.modelName,
+      totalKeys: this.keyManager.totalCount,
+      availableKeys: this.keyManager.availableCount,
+      exhaustedInfo: this.keyManager.getExhaustedInfo(),
+      keys: this.keyManager.getStats()
+    };
   }
 
   /**
@@ -62,9 +77,40 @@ class GeminiService {
   }
 
   /**
+   * Check whether an error is retryable with a different key
+   * (auth errors, server errors, network errors, etc.)
+   * @param {Error} error
+   * @returns {boolean}
+   */
+  _isRetryableError(error) {
+    const msg = (error?.message || '').toLowerCase();
+    const status = error?.status || 0;
+    return (
+      this._isRateLimitError(error) ||
+      status === 401 ||
+      status === 403 ||
+      status === 500 ||
+      status === 503 ||
+      msg.includes('api_key_invalid') ||
+      msg.includes('invalid api key') ||
+      msg.includes('unauthorized') ||
+      msg.includes('forbidden') ||
+      msg.includes('permission') ||
+      msg.includes('internal') ||
+      msg.includes('unavailable') ||
+      msg.includes('econnrefused') ||
+      msg.includes('econnreset') ||
+      msg.includes('timeout') ||
+      msg.includes('network') ||
+      msg.includes('fetch failed') ||
+      msg.includes('socket hang up')
+    );
+  }
+
+  /**
    * Execute a Gemini call with automatic round-robin key rotation.
-   * If the current key hits a rate limit, it marks it as exhausted and
-   * retries with the next available key.
+   * If the current key hits a rate limit or any retryable error, it marks
+   * it as exhausted and retries with the next available key.
    *
    * @param {Function} promptFn - async (model) => result
    * @returns {Promise<*>} The result from promptFn
@@ -76,8 +122,10 @@ class GeminiService {
       const entry = this.keyManager.getNextClient();
 
       if (!entry) {
+        const exhaustedInfo = this.keyManager.getExhaustedInfo();
         throw new Error(
-          `All ${this.keyManager.totalCount} API keys are rate-limited. ` +
+          `All ${this.keyManager.totalCount} API keys are exhausted/rate-limited. ` +
+          `Details: ${exhaustedInfo}. ` +
           'Please wait for the cooldown or add more keys.'
         );
       }
@@ -90,24 +138,42 @@ class GeminiService {
           `🔑 [${this.serviceLabel}] Using key #${keyIndex + 1}/${this.keyManager.totalCount} ` +
           `(attempt ${attempt + 1}/${this.maxRetries})`
         );
-        return await promptFn(model);
+        const result = await promptFn(model);
+        // Record success and log for round-robin visibility
+        this.keyManager.recordSuccess(keyIndex);
+        console.log(
+          `✅ [${this.serviceLabel}] Key #${keyIndex + 1} succeeded (total uses: ${this.keyManager.usageCounts.get(keyIndex) || 1})`
+        );
+        return result;
       } catch (error) {
         lastError = error;
+        const errorMsg = error.message || String(error);
 
         if (this._isRateLimitError(error)) {
-          this.keyManager.markExhausted(keyIndex);
+          this.keyManager.markExhausted(keyIndex, 'rate-limited');
           console.warn(
-            `⚠️  [${this.serviceLabel}] Key #${keyIndex + 1} rate-limited, trying next key...`
+            `⚠️  [${this.serviceLabel}] Key #${keyIndex + 1} rate-limited, trying next key... (${errorMsg.slice(0, 100)})`
           );
           continue; // try next key
         }
 
-        // Not a rate-limit error — don't retry, just throw
+        if (this._isRetryableError(error)) {
+          this.keyManager.markExhausted(keyIndex, 'error');
+          console.warn(
+            `⚠️  [${this.serviceLabel}] Key #${keyIndex + 1} failed with retryable error, trying next key... (${errorMsg.slice(0, 100)})`
+          );
+          continue; // try next key
+        }
+
+        // Non-retryable error (e.g. bad prompt, invalid JSON response) — throw immediately
+        console.error(
+          `❌ [${this.serviceLabel}] Key #${keyIndex + 1} failed with non-retryable error: ${errorMsg.slice(0, 200)}`
+        );
         throw error;
       }
     }
 
-    throw lastError || new Error('All API keys exhausted');
+    throw lastError || new Error('All API keys exhausted after retries');
   }
 
   /**
@@ -227,68 +293,29 @@ class GeminiService {
   }
 
   /**
-   * Clean a batch of prompts using Gemini (with key rotation)
+   * Clean a batch of prompts using Gemini — sends individual prompts in PARALLEL
+   * across different API keys for true round-robin utilization.
    * @param {Array<string>} promptBatch - Array of JSON strings to clean
    * @param {string} type - Prompt type: 'image' or 'video' (default: 'image')
    * @returns {Promise<Array<string>>} Array of cleaned JSON strings
    */
   async cleanBatch(promptBatch, type = PROMPT_TYPE_IMAGE) {
     try {
-      console.log(`🤖 [${this.serviceLabel}] Cleaning batch of ${promptBatch.length} ${type} prompts with model: ${this.modelName}`);
+      console.log(`🤖 [${this.serviceLabel}] Cleaning batch of ${promptBatch.length} ${type} prompts IN PARALLEL across keys with model: ${this.modelName}`);
 
-      return await this.callWithRotation(async (model) => {
-        // Create batch prompt - send all prompts together
-        const batchPrompt = promptBatch.map((prompt, index) => 
-          `Prompt ${index + 1}:\n${prompt}`
-        ).join('\n\n---\n\n');
+      // Send each prompt individually in parallel — each one goes through
+      // callWithRotation() which picks a different key via round-robin
+      const promises = promptBatch.map((prompt, index) =>
+        this.cleanPrompt(prompt, type).catch(error => {
+          console.warn(`⚠️  [${this.serviceLabel}] Prompt ${index + 1}/${promptBatch.length} failed: ${error.message.slice(0, 100)}`);
+          // Return original prompt on failure instead of crashing the whole batch
+          return prompt;
+        })
+      );
 
-        const fullPrompt = `${getBatchMasterPrompt(type)}\n\nInput JSON prompts to clean:\n${batchPrompt}`;
-
-        const result = await model.generateContent(fullPrompt);
-        const response = await result.response;
-        const cleanedText = response.text();
-
-        // Extract JSON array from response
-        let cleanedJson = this.extractJsonFromResponse(cleanedText, true);
-
-        // Parse the JSON array
-        let parsedArray;
-        try {
-          parsedArray = JSON.parse(cleanedJson);
-        } catch (e) {
-          throw new Error(`Invalid JSON array response from Gemini: ${e.message}`);
-        }
-
-        // Ensure we have an array
-        if (!Array.isArray(parsedArray)) {
-          throw new Error('Gemini did not return a JSON array');
-        }
-
-        // Post-process each cleaned prompt
-        const cleanedResults = [];
-        for (let i = 0; i < parsedArray.length; i++) {
-          let cleanedItem = parsedArray[i];
-
-          // If it's a string, try to parse it as JSON
-          if (typeof cleanedItem === 'string') {
-            try {
-              cleanedItem = JSON.parse(cleanedItem);
-            } catch (e) {
-              // If not JSON, wrap it
-              cleanedItem = { scene: cleanedItem };
-            }
-          }
-
-          // Apply post-processing to remove text content (only for image type)
-          if (type === PROMPT_TYPE_IMAGE) {
-            cleanedItem = this.removeTextContent(cleanedItem);
-          }
-
-          cleanedResults.push(JSON.stringify(cleanedItem, null, 2));
-        }
-
-        return cleanedResults;
-      });
+      const results = await Promise.all(promises);
+      console.log(`✅ [${this.serviceLabel}] Batch of ${promptBatch.length} prompts completed`);
+      return results;
     } catch (error) {
       console.error('Error cleaning batch with Gemini:', error);
       throw new Error(`Failed to clean batch: ${error.message}`);

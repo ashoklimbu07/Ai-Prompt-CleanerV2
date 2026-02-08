@@ -6,7 +6,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
  * and automatic fallback when a key hits its rate limit.
  */
 class ApiKeyManager {
-  /**777
+  /**
    * @param {string[]} apiKeys - Array of API key strings
    * @param {Object} options
    * @param {number} options.cooldownMs - How long to rest an exhausted key (default 60s)
@@ -16,9 +16,14 @@ class ApiKeyManager {
     this.currentIndex = 0;
     this.cooldownMs = options.cooldownMs || 60_000;
 
-    // Track exhausted keys and when they were exhausted
+    // Track exhausted keys: { index -> { timestamp, reason } }
     this.exhaustedKeys = new Set();
     this.exhaustedTimestamps = new Map();
+    this.exhaustedReasons = new Map();
+
+    // Track usage statistics
+    this.usageCounts = new Map(); // keyIndex -> number of successful uses
+    this.errorCounts = new Map(); // keyIndex -> number of errors
 
     // Create a GoogleGenerativeAI client for each key
     this.clients = this.apiKeys.map(key => new GoogleGenerativeAI(key));
@@ -31,9 +36,11 @@ class ApiKeyManager {
     const now = Date.now();
     for (const [idx, timestamp] of this.exhaustedTimestamps.entries()) {
       if (now - timestamp > this.cooldownMs) {
+        const reason = this.exhaustedReasons.get(idx) || 'unknown';
         this.exhaustedKeys.delete(idx);
         this.exhaustedTimestamps.delete(idx);
-        console.log(`🔑 Key #${idx + 1} cooldown expired, back in rotation`);
+        this.exhaustedReasons.delete(idx);
+        console.log(`🔑 Key #${idx + 1} cooldown expired (was: ${reason}), back in rotation`);
       }
     }
   }
@@ -62,11 +69,53 @@ class ApiKeyManager {
   /**
    * Mark a specific key as rate-limited / exhausted
    * @param {number} keyIndex
+   * @param {string} reason - Why the key was exhausted (e.g. 'rate-limited', 'error', 'invalid')
    */
-  markExhausted(keyIndex) {
+  markExhausted(keyIndex, reason = 'rate-limited') {
     this.exhaustedKeys.add(keyIndex);
     this.exhaustedTimestamps.set(keyIndex, Date.now());
-    console.warn(`⚠️  Key #${keyIndex + 1} hit rate limit, removed from rotation`);
+    this.exhaustedReasons.set(keyIndex, reason);
+    this.errorCounts.set(keyIndex, (this.errorCounts.get(keyIndex) || 0) + 1);
+    console.warn(`⚠️  Key #${keyIndex + 1} exhausted (${reason}), removed from rotation. Cooldown: ${this.cooldownMs / 1000}s`);
+  }
+
+  /**
+   * Record a successful usage of a key
+   * @param {number} keyIndex
+   */
+  recordSuccess(keyIndex) {
+    this.usageCounts.set(keyIndex, (this.usageCounts.get(keyIndex) || 0) + 1);
+  }
+
+  /**
+   * Get diagnostic info about exhausted keys
+   * @returns {string}
+   */
+  getExhaustedInfo() {
+    const parts = [];
+    for (const [idx, timestamp] of this.exhaustedTimestamps.entries()) {
+      const reason = this.exhaustedReasons.get(idx) || 'unknown';
+      const secsAgo = Math.round((Date.now() - timestamp) / 1000);
+      const cooldownRemaining = Math.max(0, Math.round((this.cooldownMs - (Date.now() - timestamp)) / 1000));
+      parts.push(`Key#${idx + 1}: ${reason} (${secsAgo}s ago, ${cooldownRemaining}s until retry)`);
+    }
+    return parts.length > 0 ? parts.join(', ') : 'none exhausted';
+  }
+
+  /**
+   * Get usage statistics for all keys
+   * @returns {Object[]}
+   */
+  getStats() {
+    return this.apiKeys.map((key, idx) => ({
+      keyIndex: idx,
+      keyLabel: `Key #${idx + 1}`,
+      maskedKey: key.slice(0, 10) + '...' + key.slice(-4),
+      uses: this.usageCounts.get(idx) || 0,
+      errors: this.errorCounts.get(idx) || 0,
+      isExhausted: this.exhaustedKeys.has(idx),
+      exhaustReason: this.exhaustedReasons.get(idx) || null,
+    }));
   }
 
   /**

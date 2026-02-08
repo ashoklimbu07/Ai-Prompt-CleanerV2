@@ -11,11 +11,13 @@ class MCPServer {
     // Accepts arrays of keys for round-robin rotation
     this.geminiImageService = new GeminiService(config.geminiApiKeys || config.geminiApiKey, {
       apiKeyLabel: 'GEMINI_API_KEY(1-10)',
-      serviceLabel: 'image'
+      serviceLabel: 'image',
+      modelName: config.geminiModel
     });
     this.geminiVideoService = new GeminiService(config.geminiVideoApiKeys || config.geminiVideoApiKey, {
       apiKeyLabel: 'GEMINI_VIDEO_API_KEY(1-10)',
-      serviceLabel: 'video'
+      serviceLabel: 'video',
+      modelName: config.geminiModel
     });
     
     // Rate limiter configuration

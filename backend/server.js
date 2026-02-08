@@ -54,14 +54,26 @@ const geminiVideoKeys = [
   process.env.GEMINI_VIDEO_API_KEY10,
 ].filter(Boolean);
 
+// Read configuration from .env (with sensible defaults)
+const BATCH_SIZE = parseInt(process.env.BATCH_SIZE, 10) || 5;
+const DELAY_BETWEEN_BATCHES = parseInt(process.env.DELAY_BETWEEN_BATCHES, 10) || 6000;
+const DELAY_BETWEEN_PROMPTS = parseInt(process.env.DELAY_BETWEEN_PROMPTS, 10) || 2000;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const MAX_REQUESTS_PER_MINUTE = parseInt(process.env.MAX_REQUESTS_PER_MINUTE, 10) || 10;
+const MINUTE_DELAY = parseInt(process.env.MINUTE_DELAY, 10) || 65000;
+
+console.log(`⚙️  Config: BATCH_SIZE=${BATCH_SIZE}, DELAY_BETWEEN_BATCHES=${DELAY_BETWEEN_BATCHES}ms, MODEL=${GEMINI_MODEL}`);
+console.log(`⚙️  Config: MAX_REQUESTS_PER_MINUTE=${MAX_REQUESTS_PER_MINUTE}, MINUTE_DELAY=${MINUTE_DELAY}ms`);
+
 // Initialize MCP Server with arrays of API keys (round-robin rotation)
 const mcpServer = new MCPServer({
   geminiApiKeys: geminiImageKeys,
   geminiVideoApiKeys: geminiVideoKeys,
-  batchSize: 5,
-  maxRequestsPerMinute: 10,
-  delayBetweenBatches: 6000,
-  minuteDelay: 65000
+  geminiModel: GEMINI_MODEL,
+  batchSize: BATCH_SIZE,
+  maxRequestsPerMinute: MAX_REQUESTS_PER_MINUTE,
+  delayBetweenBatches: DELAY_BETWEEN_BATCHES,
+  minuteDelay: MINUTE_DELAY
 });
 
 // Get handlers from MCP server
@@ -71,6 +83,7 @@ const handlers = mcpServer.getHandlers();
 app.post('/api/clean-prompt', (req, res) => handlers.handleCleanPrompt(req, res));
 app.post('/api/clean-prompts', (req, res) => handlers.handleCleanPrompts(req, res));
 app.get('/api/health', (req, res) => handlers.handleHealthCheck(req, res));
+app.get('/api/key-stats', (req, res) => handlers.handleKeyStats(req, res));
 
 const server = app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
