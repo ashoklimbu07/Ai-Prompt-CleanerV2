@@ -55,6 +55,7 @@ OUTPUT FORMAT (MUST BE VALID JSON):
   "quality": {
     "style": "Quality descriptors"
   }
+     
 }
 
 CRITICAL INSTRUCTIONS:

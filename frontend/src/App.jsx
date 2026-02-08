@@ -6,6 +6,7 @@ function App() {
   const [inputText, setInputText] = useState('');
   const [extractedPrompts, setExtractedPrompts] = useState([]);
   const [copiedIndex, setCopiedIndex] = useState(null);
+  const [copiedTextIndex, setCopiedTextIndex] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [warningMessage, setWarningMessage] = useState(null);
   const [fileName, setFileName] = useState(null);
@@ -542,6 +543,16 @@ function App() {
     }
   };
 
+  const handleCopyText = async (text, index) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedTextIndex(index);
+      setTimeout(() => setCopiedTextIndex(null), 2000);
+    } catch (err) {
+      alert('Failed to copy to clipboard');
+    }
+  };
+
   const handleDeletePrompt = (index) => {
     const confirmed = window.confirm('Delete this prompt? This action cannot be undone.');
     if (!confirmed) return;
@@ -550,12 +561,15 @@ function App() {
     if (copiedIndex === index) {
       setCopiedIndex(null);
     }
+    if (copiedTextIndex === index) {
+      setCopiedTextIndex(null);
+    }
     if (expandedJsonIndex === index) {
       setExpandedJsonIndex(null);
     }
   };
 
-  const handleDownloadAll = () => {
+  const handleDownloadAllJson = () => {
     if (extractedPrompts.length === 0) return;
     
     try {
@@ -567,7 +581,30 @@ function App() {
       const link = document.createElement('a');
       link.href = url;
       const typeLabel = lastResultType || 'image';
-      link.download = `${typeLabel}-prompts.txt`;
+      link.download = `${typeLabel}-prompts-json.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading file:', err);
+      setErrorMessage(`Failed to download file: ${err.message}`);
+    }
+  };
+
+  const handleDownloadAllTxt = () => {
+    if (extractedPrompts.length === 0) return;
+    
+    try {
+      const promptTexts = extractedPrompts.map(p => p.completeImagePrompt || '').filter(t => t);
+      const combinedText = promptTexts.join('\n\n');
+      
+      const blob = new Blob([combinedText], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const typeLabel = lastResultType || 'image';
+      link.download = `${typeLabel}-prompts-text.txt`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -777,13 +814,22 @@ function App() {
                     <span className="ml-2 text-xs text-yellow-600 font-normal">(JS Fallback)</span>
                   )}
                 </h2>
-                <button 
-                  onClick={handleDownloadAll} 
-                  className="text-sm text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-1"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download all in txt</span>
-                </button>
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={handleDownloadAllJson} 
+                    className="text-sm text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-1"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download all in JSON format (txt)</span>
+                  </button>
+                  <button 
+                    onClick={handleDownloadAllTxt} 
+                    className="text-sm text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-1"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download all in TXT format (txt)</span>
+                  </button>
+                </div>
               </div>
             </div>
             
@@ -802,6 +848,26 @@ function App() {
                       >
                         <Trash2 className="w-3 h-3" />
                         <span>Delete</span>
+                      </button>
+                      <button
+                        onClick={() => handleCopyText(item.completeImagePrompt || '', index)}
+                        className={`text-xs px-3 py-1 rounded transition-all flex items-center gap-1 ${
+                          copiedTextIndex === index 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        }`}
+                      >
+                        {copiedTextIndex === index ? (
+                          <>
+                            <Check className="w-3 h-3" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy in txt</span>
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={() => handleCopy(item.json, index)}
