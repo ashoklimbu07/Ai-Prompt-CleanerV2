@@ -1,8 +1,8 @@
 # AI Image Prompt Extractor
 
-## What This Project Does
+## What This Tools Does
 
-This project extracts image prompts from video-generation JSON/text data and converts them into cleaner, reusable prompt text.  
+This is web application where image prompts from video-generation JSON/text data and converts them into cleaner, reusable prompt text.  
 It includes:
 
 - A React frontend for uploading/pasting input and reviewing results.
@@ -11,7 +11,7 @@ It includes:
 ## What Problem It Solves
 
 Video-generation outputs often contain noisy or hard-to-reuse prompt payloads.  
-This project solves that by:
+This tool solves that by:
 
 - Parsing and extracting the relevant prompt content.
 - Cleaning prompt text into a more consistent format.
@@ -19,7 +19,7 @@ This project solves that by:
 
 ## Why It Was Made
 
-The project was built to reduce manual prompt cleanup work and make extracted prompts usable across image-generation workflows with minimal editing.
+The tool was built to reduce manual prompt cleanup work and make extracted prompts usable across image-generation workflows with minimal editing.
 
 ## Project Structure
 
